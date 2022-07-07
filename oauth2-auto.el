@@ -3,6 +3,7 @@
 ;; Copyright (C) 2011-2021 Free Software Foundation, Inc
 
 ;; Author: Adrià Garriga-Alonso <adria.garriga@gmail.com>
+;; URL: https://github.com/rhaps0dy/emacs-oauth2-auto
 ;; Version: 0.1
 ;; Keywords: comm oauth2
 ;; Package-Requires: ((emacs "26.1") (aio "1.0") (dash "2.19"))
@@ -39,45 +40,44 @@
 (require 'alert)   ; `alert' to give the user a heads up to go to their browser and log in
 
 (defgroup oauth2-auto nil
-  "Automatically refreshing OAuth 2.0 tokens"
+  "Automatically refreshing OAuth 2.0 tokens."
   :group 'comm)
 
 
 ;; Endpoints and client secret/id used for various OAuth2 providers.
 
 (defcustom oauth2-auto-microsoft-default-tenant "common"
-  "Default tenant ID for Microsoft OAuth2"
+  "Default tenant ID for Microsoft OAuth2."
   :group 'oauth2-auto
   :type 'string)
 
 (defcustom oauth2-auto-microsoft-client-id ""
-  "Default client ID for Microsoft OAuth2"
+  "Default client ID for Microsoft OAuth2."
   :group 'oauth2-auto
   :type 'string)
 
 (defcustom oauth2-auto-microsoft-client-secret ""
-  "Default client secret for Microsoft OAuth2"
+  "Default client secret for Microsoft OAuth2."
   :group 'oauth2-auto
   :type 'string)
 
 (defcustom oauth2-auto-google-client-id ""
-  "Default client ID for Google OAuth2"
+  "Default client ID for Google OAuth2."
   :group 'oauth2-auto
   :type 'string)
 
 (defcustom oauth2-auto-google-client-secret ""
-  "Default client secret for Google OAuth2"
+  "Default client secret for Google OAuth2."
   :group 'oauth2-auto
   :type 'string)
 
 (defcustom oauth2-auto-additional-providers-alist '()
-  "Additional OAuth2 providers following
-`oauth2-auto--default-providers'"
+  "Additional OAuth2 providers following `oauth2-auto--default-providers'."
   :group 'oauth2-auto
   :type 'alist)
 
 (defun oauth2-auto--default-providers ()
-  "Default OAuth2 providers"
+  "Default OAuth2 providers."
   (let ((ms-oauth2-url (concat "https://login.microsoftonline.com/"
                                oauth2-auto-microsoft-default-tenant
                                "/oauth2/v2.0/")))
@@ -97,8 +97,8 @@
 
 
 (defun oauth2-auto-providers-alist ()
-  "The OAuth2 providers specified in `oauth2-auto--default-providers' and
-`oauth2-auto-additional-providers-alist'"
+  "The OAuth2 providers specified in `oauth2-auto--default-providers' and \
+`oauth2-auto-additional-providers-alist'."
   (append oauth2-auto-additional-providers-alist
           (oauth2-auto--default-providers)))
 
@@ -106,7 +106,11 @@
 ;; Main data structure
 
 (defun oauth2-auto--make-plist (response plist)
-  "Main data structure of the module. Stored in the plstore"
+  "Make the main data structure of the module.
+
+This data structure is a plist containing an :access-token, :refresh-token, and
+:expiration.  This function takes RESPONSE from ‘oauth2-auto--request’, and data
+from PLIST if non-nil.  The return value is intended to be stored in plstore."
   (let ((refresh-token (or (cdr (assoc 'refresh_token response))
                            (plist-get plist :refresh-token))))
     (unless refresh-token
@@ -121,34 +125,34 @@
 ;; Checking token expiration
 
 (defun oauth2-auto--now ()
-  "Current epoch in seconds"
-  (time-convert nil 'integer))
+  "Current epoch in seconds."
+  (seconds-to-time nil 'integer))
 
 (defun oauth2-auto--plist-needs-refreshing (plist)
-  "Does the authentication-token in plist need refreshing?"
+  "Return non-nil if the authentication-token in PLIST needs refreshing."
   (or (not (plist-get plist :expiration))
       (> (oauth2-auto--now)
-          (plist-get plist :expiration))))
+         (plist-get plist :expiration))))
 
 
 ;; Cache and plstore read/write
 
 (defcustom oauth2-auto-plstore (concat user-emacs-directory "oauth2-auto.plist")
-  "File to store the authenticated accounts to"
+  "File to store the authenticated accounts to."
   :group 'oauth2-auto
   :type 'file)
 
 ; TODO remove cache or invalidate it properly when other programs write to disk
 (defvar oauth2-auto--plstore-cache
   (make-hash-table :test 'equal)
-  "Cache the values written to and read from the plstore")
+  "Cache the values written to and read from the plstore.")
 
 (defun oauth2-auto--compute-id (username provider)
-  "Unique ID for a username and provider"
+  "Unique ID for a USERNAME and PROVIDER."
   (url-hexify-string (pp-to-string (list username provider))))
 
 (defun oauth2-auto--plstore-write (username provider plist)
-  "Save the data for USERNAME and PROVIDER to the plstore and cache."
+  "Save data PLIST for USERNAME and PROVIDER to the plstore and cache."
   (let ((id (oauth2-auto--compute-id username provider))
         (plstore (plstore-open oauth2-auto-plstore)))
     (unwind-protect
@@ -159,8 +163,8 @@
       (plstore-close plstore))))
 
 (defun oauth2-auto--plstore-read (username provider)
-  "Read the data for USERNAME and PROVIDER from the cache, else
-from the plstore. Cache data if a miss occurs."
+  "Read the data for USERNAME and PROVIDER from the cache, else from plstore.
+Cache data if a miss occurs."
   (let ((id (oauth2-auto--compute-id username provider)))
     ; Assume cache is invalidated. FIXME
     (or nil ;(gethash id oauth2-auto--plstore-cache)
@@ -207,53 +211,58 @@ from the plstore. Cache data if a miss occurs."
 
 ;;;###autoload
 (defun oauth2-auto-plist-sync (username provider)
+  "Synchronously call ‘oauth2-auto-plist’ and return result.
+For USERNAME and PROVIDER, see."
   (oauth2-auto-poll-promise (oauth2-auto-plist username provider)))
 
 (aio-defun oauth2-auto-access-token (username provider)
-  "Returns the access-token string used to authenticate user
-USERNAME to PROVIDER."
+  "Returns access-token string used to authenticate USERNAME to PROVIDER."
   (plist-get (aio-await (oauth2-auto-plist username provider))
              :access-token))
 
 ;;;###autoload
 (defun oauth2-auto-access-token-sync (username provider)
+  "Synchronously call ‘oauth2-auto-access-token’ and return result.
+For USERNAME and PROVIDER, see."
   (oauth2-auto-poll-promise (oauth2-auto-access-token username provider)))
 
 
 ;; Making and encoding requests
 
 (defun oauth2-auto--provider-info (provider)
-  "Get provider data from `oauth2-auto-providers-alist'"
+  "Get data for PROVIDER from `oauth2-auto-providers-alist'."
   (let ((provider-info (cdr (assoc provider (oauth2-auto-providers-alist)))))
     (when (not provider-info)
       (error "oauth2-auto: Unknown provider: %s" provider))
     (dolist (key '(client_id client_secret))
         (when (equal "" (cdr (assoc key provider-info)))
-      (error "oauth2-auto: Provider %s was requested but has no `%s' specified" provider key)))
+         (error "oauth2-auto: Provider %s was requested but has no `%s' specified" provider key)))
     provider-info))
 
 (defun oauth2-auto--urlify-request (alist)
-  "makes alist of (symbol . string) into URL-formatted request"
+  "Make ALIST of (symbol . string) into URL-formatted request."
   (mapconcat (lambda (s) (concat (url-hexify-string (symbol-name (car s)))
                                  "=" (url-hexify-string (cdr s))))
              alist "&"))
 
 (defun oauth2-auto--craft-request-alist (provider-info data-keys extra-alist)
-  "Make a request for PROVIDER using the info in DATA-KEYS and `extra-alist'"
+  "Make request for PROVIDER-INFO using the info in DATA-KEYS and EXTRA-ALIST."
   (append (--filter (memq (car it) data-keys) provider-info) extra-alist))
 
 (defun oauth2-auto--request-access-parse ()
-  "Parse the result of an OAuth request. From `oauth2.el',
-licensed under GPLv3+. See https://github.com/emacsmirror/oauth2."
+  "Parse the result of an OAuth request.
+
+Code from `oauth2.el', licensed under GPLv3+.
+See https://github.com/emacsmirror/oauth2."
   (goto-char (point-min))
   (when (search-forward-regexp "^$" nil t)
     (json-read)))
 
 (aio-defun oauth2-auto--request (provider url-key data-keys extra-alist)
-  "Asynchronously send a POST request to OAuth2 provider
-`provider', using the url and data specified under `url-key' and
-`data-keys' in the provider info (see
-`oauth2-auto-providers-alist'). Also send data in `extra-alist'."
+  "Asynchronously send a POST request to OAuth2 PROVIDER.
+PROVIDER uses the url and data specified under URL-KEY and
+DATA-KEYS in the provider info (see `oauth2-auto-providers-alist').
+Also send data in EXTRA-ALIST."
   (let* (; Craft the request first
          (provider-info (oauth2-auto--provider-info provider))
          (url (cdr (assoc url-key provider-info)))
@@ -282,6 +291,9 @@ licensed under GPLv3+. See https://github.com/emacsmirror/oauth2."
 ;; Barebones HTTP server to receive the tokens
 
 (defun oauth2-auto--httpd-respond (process response)
+  "Send response for OAuth2 challenge-response.
+PROCESS is the server process created in ‘oauth2-auto--browser-request’.
+RESPONSE is the HTTP response body to send."
   (process-send-string
    process (concat "HTTP/1.0 200 OK\n"
                    "Content-Type: text/plain; charset=utf-8\n"
@@ -291,21 +303,25 @@ licensed under GPLv3+. See https://github.com/emacsmirror/oauth2."
   (process-send-eof process))
 
 (defmacro oauth2-auto--query-case (&rest cases)
-  "Extracts and binds keys `symbols' from `query-alist'. If all of them are present,
-respond with `msg' and runs `body'."
+  "Extract and binds keys `symbols' from `query-alist'.
+If all of them are present, respond with `msg' and runs `body'.  For format of
+CASES see ‘oauth2-auto--httpd-filter’."
   `(cond
-   ,@(mapcar (lambda (case)
-               (let ((symbols (car case))
-                     (msg (cadr case))
-                     (body (cddr case)))
-                 `((and ,@(--map `(cdr (assoc ',it query-alist)) symbols))
-                   (let* (,@(--map `(,it (cdr (assoc ',it query-alist))) symbols)
-                          (msg ,msg))
-                     (oauth2-auto--httpd-respond process msg)
-                     ,@body))))
-             cases)))
+    ,@(mapcar (lambda (case)
+                (let ((symbols (car case))
+                      (msg (cadr case))
+                      (body (cddr case)))
+                  `((and ,@(--map `(cdr (assoc ',it query-alist)) symbols))
+                    (let* (,@(--map `(,it (cdr (assoc ',it query-alist))) symbols)
+                           (msg ,msg))
+                      (oauth2-auto--httpd-respond process msg)
+                      ,@body))))
+              cases)))
 
 (defun oauth2-auto--httpd-filter (process input)
+  "The HTTP handler for the OAuth2 challenge-response server.
+PROCESS is the server process created in ‘oauth2-auto--browser-request’.
+INPUT is the raw HTTP request."
   (let ((query-alist
          (with-temp-buffer
            (insert input)
@@ -328,10 +344,12 @@ respond with `msg' and runs `body'."
 
 
 (aio-defun oauth2-auto--browser-request (provider url-key data-keys extra-alist &optional quiet)
-  "Open browser at url and parameters given by taking `url-key' and `data-keys'
-from the data of the OAuth2 provider `provider', and adding `extra-alist'.
+  "Open browser for the OAuth2 PROVIDER.
+Browser is opened at url and parameters given by taking URL-KEY and DATA-KEYS
+from the data of the PROVIDER, and adding EXTRA-ALIST.  Then we listen to the
+redirect response and return it.
 
-Then listen to the redirect response and return it."
+If QUIET is non-nil, suppress alerts."
   (let* (; First open listener to some port in localhost
          (server-proc-filter (aio-make-callback))
          (server-proc (make-network-process
@@ -377,24 +395,46 @@ Then listen to the redirect response and return it."
       (delete-process server-proc))))
 
 (defconst oauth2-auto--url-unreserved
-  "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXY0123456789-._~")
+  "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXY0123456789-_"
+  "List of valid non-padding characters in Base64 URL encoded string.")
 
 (defun oauth2-auto--random-string (len)
-  "Return a random string of length `len'. Uses only characters
-valid in `base64url-encode-string'"
+  "Return a random string of length LEN.
+Uses only characters valid in the output of `base64url-encode-string'."
   ; inspired by http://xahlee.info/emacs/emacs/elisp_insert_random_number_string.html
   (let ((rand-len (length oauth2-auto--url-unreserved)))
-  (with-temp-buffer
-    (dotimes (l len)
-      (insert (elt oauth2-auto--url-unreserved (random rand-len))))
-    (buffer-string))))
+   (with-temp-buffer
+     (dotimes (l len)
+       (insert (elt oauth2-auto--url-unreserved (random rand-len))))
+     (buffer-string))))
 
+(defun oauth2-auto--base64url-encode-string (string &optional no-pad)
+  "Package-local version of ‘base64url-encode-string’.
+
+Base64url-encode STRING and return the result.
+
+Optional second argument NO-PAD means do not add padding char =.
+
+This produces the URL variant of base 64 encoding defined in RFC 4648.
+
+Exists because this package is compatible with Emacs 26.1, but
+‘base64url-encode-string’ was only added in Emacs 27.1."
+  (if (fboundp 'base64url-encode-string)
+      ;; Use funcall to silence flycheck.
+      (funcall 'base64url-encode-string string no-pad)
+    (let* ((enc (base64-encode-string string t))
+           (enc (replace-regexp-in-string "+" "-" enc))
+           (enc (replace-regexp-in-string "/" "_" enc)))
+      (if no-pad
+          (replace-regexp-in-string "=" "" enc)
+        enc))))
 
 ;; Control flow to authenticate client to the OAuth2 providers
 
 
 (aio-defun oauth2-auto-refresh-or-authenticate (username provider plist)
-  "Try to refresh, and if refreshing fails, authenticate. Convert the result to a `plist'."
+  "Try to refresh, and if refreshing fails, authenticate.
+For USERNAME, PROVIDER, and PLIST see ‘oauth2-auto-refresh’."
   (let* ((promise (oauth2-auto-refresh username provider plist))
          (result (aio-await (aio-catch promise))))
     (if (eq (car result) :success)
@@ -404,7 +444,7 @@ valid in `base64url-encode-string'"
       (aio-await (oauth2-auto-authenticate username provider)))))
 
 (aio-defun oauth2-auto-authenticate (username provider)
-  "Authenticates USERNAME using PROVIDER and returns a plist"
+  "Authenticates USERNAME using PROVIDER and returns a plist."
   (let* ((state (oauth2-auto--random-string 8))
          (code-verifier (oauth2-auto--random-string 43))
          (binary-code-challenge (secure-hash 'sha256 code-verifier nil nil t))
@@ -417,7 +457,7 @@ valid in `base64url-encode-string'"
                        (response_mode . "query") ;; microsoft-only
                        (access_type . "offline") ;; google-only
                        (state . ,state)
-                       (code_challenge . ,(base64url-encode-string binary-code-challenge t))
+                       (code_challenge . ,(oauth2-auto--base64url-encode-string binary-code-challenge t))
                        (code_challenge_method . "S256")))))
          (response-state (cdr (assoc 'state response)))
          (redirect-uri (cdr (assoc 'redirect_uri response)))
@@ -427,7 +467,7 @@ valid in `base64url-encode-string'"
     ; https://docs.microsoft.com/en-us/azure/active-directory/develop/v2-oauth2-auth-code-flow#successful-response
     (unless (equal state response-state)
       (error
-       "state sent and returned do not match. Security risk. state=%s response_state=%s"
+       "State sent and returned do not match. Security risk. state=%s response_state=%s"
        state response-state))
 
     (oauth2-auto--make-plist
@@ -442,8 +482,8 @@ valid in `base64url-encode-string'"
      nil)))
 
 (aio-defun oauth2-auto-refresh (username provider plist)
-  "Refreshes access of USERNAME using PROVIDER using the refresh-token
-in PLIST. Returns the refreshed plist."
+  "Refresh access of USERNAME using PROVIDER using the refresh-token in PLIST.
+Return the refreshed plist."
   (let ((refresh-token (plist-get plist :refresh-token)))
     (unless refresh-token
       (error "Refresh token is nil in plist=%s" (pp-to-string plist)))
@@ -458,3 +498,5 @@ in PLIST. Returns the refreshed plist."
      plist)))
 
 (provide 'oauth2-auto)
+
+;;; oauth2-auto.el ends here
